@@ -8,5 +8,6 @@ pub enum Error {
     NotOwner,
     NotInRoom,
     RoomAlreadyExists,
+    Overspent,
 }
 

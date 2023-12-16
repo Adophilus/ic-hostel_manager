@@ -35,14 +35,12 @@ fn get_room_by_number(
 
 #[ic_cdk::update]
 fn create_room(payload: models::CreateRoomPayload) -> Result<String, error::Error> {
-    let room = models::Room {
-        no: payload.number,
-        capacity: payload.capacity,
-        price_per_occupant: payload.price_per_occupant,
-        state: models::RoomState::TotallyVacant,
-        occupants: models::CustomVec(vec![]),
-        owner: models::User(ic_cdk::caller().to_string()),
-    };
+    let room = models::Room::new(
+        payload.number,
+        payload.capacity,
+        payload.price_per_occupant,
+        models::User(ic_cdk::caller().to_string()),
+    );
 
     ROOMS.with(|r| {
         let mut rooms = r.borrow_mut();
@@ -68,6 +66,8 @@ fn book_room(payload: models::BookRoomPayload) -> Result<String, error::Error> {
 
         if payload.price < room.price_per_occupant {
             return Err(error::Error::InsufficientPrice);
+        } else if payload.price > room.price_per_occupant{
+            return Err(error::Error::Overspent)
         }
 
         let occupant = models::User(ic_cdk::caller().to_string());

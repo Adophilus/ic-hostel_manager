@@ -1,9 +1,10 @@
 use candid::{Decode, Encode};
 use std::borrow;
+use ic_stable_structures::StableVec;
 
 use crate::error;
 
-#[derive(candid::CandidType, serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(candid::CandidType, serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct User(pub String);
 
 #[derive(candid::CandidType, serde::Serialize, serde::Deserialize, Clone)]
@@ -12,7 +13,7 @@ pub struct CustomVec<T>(pub Vec<T>);
 #[derive(candid::CandidType, serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
 pub enum RoomState {
     Full,
-    PartiallyVacant,
+    PartiallyOccupied,
     TotallyVacant,
 }
 
@@ -27,15 +28,36 @@ pub struct Room {
 }
 
 impl Room {
+    pub fn new(number: u64, capacity: u64, price_per_occupant: u64, owner: User) -> Self {
+        Room {
+            no: number,
+            capacity,
+            price_per_occupant,
+            state: RoomState::TotallyVacant,
+            occupants: CustomVec(vec![]),
+            owner,
+        }
+    }
+
     pub fn has_occupant(&self, occupant: User) -> Option<usize> {
         self.occupants.0.iter().position(|o| o == &occupant)
     }
 
     pub fn add_occupant(&mut self, occupant: User) -> Result<(), error::Error> {
+        if self.occupants.0.len() == self.capacity as usize {
+            return Err(error::Error::RoomFull);
+        }
+
         match self.has_occupant(occupant.clone()) {
             Some(_) => Err(error::Error::RoomAlreadyBooked),
             None => {
                 self.occupants.0.push(occupant);
+                self.state = if self.occupants.0.len() == self.capacity as usize {
+                    RoomState::Full
+                } else {
+                    RoomState::PartiallyOccupied
+                };
+                ic_cdk::println!("occupants: {:?}", self.occupants.0);
                 Ok(())
             }
         }
