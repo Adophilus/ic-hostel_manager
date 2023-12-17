@@ -4,10 +4,9 @@ pub enum Error {
     RoomNotAvailable,
     RoomFull,
     RoomAlreadyBooked,
-    InsufficientPrice,
     NotOwner,
     NotInRoom,
     RoomAlreadyExists,
-    Overspent,
+    InvalidPrice,
 }
 

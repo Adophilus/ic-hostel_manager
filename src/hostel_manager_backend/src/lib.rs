@@ -1,6 +1,7 @@
 use ic_stable_structures::memory_manager;
-use ic_stable_structures::StableBTreeMap;
+// use ic_stable_structures::StableBTreeMap;
 use std::cell;
+use std::collections::HashMap;
 
 mod error;
 mod models;
@@ -12,7 +13,14 @@ thread_local! {
     static MEMORY_MANAGER: cell::RefCell<memory_manager::MemoryManager<ic_stable_structures::DefaultMemoryImpl>> = cell::RefCell::new(memory_manager::MemoryManager::init(ic_stable_structures::DefaultMemoryImpl::default()));
     // static ROOM_COUNTER: cell::RefCell<IdCell> = cell::RefCell::new(IdCell::init(MEMORY_MANAGER.with(|m| m.borrow().get(memory_manager::MemoryId::new(0))), 1).expect("Failed to initialize ROOM counter"));
     // static ROOMS: cell::RefCell<StableVec<Room>> = cell::RefCell::new(StableVec::init(MEMORY_MANAGER.with(|m| m.borrow().get(memory_manager::MemoryId::new(1)))).expect("Failed to initialize vector!"));
-    static ROOMS: cell::RefCell<StableBTreeMap<u64, models::Room, Memory>> = cell::RefCell::new(StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(memory_manager::MemoryId::new(1)))));
+    // static ROOMS: cell::RefCell<StableBTreeMap<u64, models::Room, Memory>> = cell::RefCell::new(
+    //     StableBTreeMap::init(
+    //         MEMORY_MANAGER.with(|m| m.borrow().get(memory_manager::MemoryId::new(1)))
+    //     )
+    // );
+    static ROOMS: cell::RefCell<HashMap<u64, models::Room>> = cell::RefCell::new(
+        HashMap::new()
+    );
 }
 
 #[ic_cdk::query]
@@ -25,8 +33,8 @@ fn get_room_by_number(
     payload: models::GetRoomByNumberPayload,
 ) -> Result<models::Room, error::Error> {
     ROOMS.with(|r| {
-        let room = r
-            .borrow()
+        let rooms = r.borrow();
+        let room = rooms
             .get(&payload.number)
             .ok_or(error::Error::RoomNotFound)?;
         Ok(room.clone())
@@ -39,7 +47,7 @@ fn create_room(payload: models::CreateRoomPayload) -> Result<String, error::Erro
         payload.number,
         payload.capacity,
         payload.price_per_occupant,
-        models::User(ic_cdk::caller().to_string()),
+        models::Occupant::new(ic_cdk::caller())
     );
 
     ROOMS.with(|r| {
@@ -55,22 +63,20 @@ fn create_room(payload: models::CreateRoomPayload) -> Result<String, error::Erro
 #[ic_cdk::update]
 fn book_room(payload: models::BookRoomPayload) -> Result<String, error::Error> {
     ROOMS.with(|r| {
-        let rooms = r.borrow();
-        let mut room = rooms
-            .get(&payload.number)
+        let mut rooms = r.borrow_mut();
+        let room = rooms
+            .get_mut(&payload.number)
             .ok_or(error::Error::RoomNotFound)?;
 
-        if room.state == models::RoomState::Full {
+        if room.is_full() {
             return Err(error::Error::RoomFull);
         }
 
-        if payload.price < room.price_per_occupant {
-            return Err(error::Error::InsufficientPrice);
-        } else if payload.price > room.price_per_occupant{
-            return Err(error::Error::Overspent)
+        if !room.check_price(payload.price) {
+            return Err(error::Error::InvalidPrice);
         }
 
-        let occupant = models::User(ic_cdk::caller().to_string());
+        let occupant = models::Occupant::new(ic_cdk::caller());
 
         match room.add_occupant(occupant) {
             Ok(_) => Ok(String::from("Room successfully booked")),
@@ -82,11 +88,11 @@ fn book_room(payload: models::BookRoomPayload) -> Result<String, error::Error> {
 #[ic_cdk::update]
 fn unbook_room(payload: models::UnbookRoomPayload) -> Result<String, error::Error> {
     ROOMS.with(|r| {
-        let rooms = r.borrow_mut();
-        let mut room = rooms
-            .get(&payload.number)
+        let mut rooms = r.borrow_mut();
+        let room = rooms
+            .get_mut(&payload.number)
             .ok_or(error::Error::RoomNotFound)?;
-        let occupant = models::User(ic_cdk::caller().to_string());
+        let occupant = models::Occupant::new(ic_cdk::caller());
 
         match room.has_occupant(occupant.clone()) {
             Some(_) => match room.remove_occupant(occupant) {
@@ -106,7 +112,7 @@ fn delete_room(payload: models::DeleteRoomPayload) -> Result<String, error::Erro
             .get(&payload.number)
             .ok_or(error::Error::RoomNotFound)?;
 
-        if room.owner != models::User(ic_cdk::caller().to_string()) {
+        if !room.is_owner(models::Occupant::new(ic_cdk::caller())) {
             return Err(error::Error::NotOwner);
         }
 
