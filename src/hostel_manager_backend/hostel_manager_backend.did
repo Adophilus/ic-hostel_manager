@@ -1,13 +1,21 @@
+type BookRoomPayload = record { number : nat64; price : nat64 };
+type CreateRoomPayload = record {
+  price_per_occupant : nat64;
+  number : nat64;
+  capacity : nat64;
+};
+type DeleteRoomPayload = record { number : nat64 };
 type Error = variant {
   RoomAlreadyBooked;
+  InvalidPrice;
+  RoomAlreadyExists;
   RoomNotFound;
   NotOwner;
   RoomNotAvailable;
   NotInRoom;
   RoomFull;
-  InsufficientPrice;
 };
-type Result = variant { Ok; Err : Error };
+type Result = variant { Ok : text; Err : Error };
 type Result_1 = variant { Ok : Room; Err : Error };
 type Room = record {
   no : nat64;
@@ -17,12 +25,12 @@ type Room = record {
   state : RoomState;
   capacity : nat64;
 };
-type RoomState = variant { PartiallyVacant; Full; TotallyVacant };
+type RoomState = variant { Full; PartiallyOccupied; TotallyVacant };
 service : {
-  book_room : (nat64, nat64) -> (Result);
-  create_room : (nat64, nat64) -> ();
-  delete_room : (nat64) -> (Result);
-  get_room_by_number : (nat64) -> (Result_1) query;
+  book_room : (BookRoomPayload) -> (Result);
+  create_room : (CreateRoomPayload) -> (Result);
+  delete_room : (DeleteRoomPayload) -> (Result);
+  get_room_by_number : (DeleteRoomPayload) -> (Result_1) query;
   get_rooms : () -> (vec Room) query;
-  unbook_room : (nat64) -> (Result);
+  unbook_room : (DeleteRoomPayload) -> (Result);
 }
